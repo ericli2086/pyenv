@@ -1,0 +1,253 @@
+#!/usr/bin/env bash
+
+[[ $UID -eq 0 ]] || export SUDO="sudo"
+
+_red() {
+    printf '\033[0;31;31m%b\033[0m' "$1"
+}
+
+_exists() {
+    local cmd="$1"
+    if eval type type > /dev/null 2>&1; then
+        eval type "$cmd" > /dev/null 2>&1
+    elif command > /dev/null 2>&1; then
+        command -v "$cmd" > /dev/null 2>&1
+    else
+        which "$cmd" > /dev/null 2>&1
+    fi
+    local rt=$?
+    return ${rt}
+}
+
+_depends() {
+    local tools=""
+    local tmpdir="$HOME/.local/share/tmp"
+
+    # Create user tmp directory
+    test -f ${tmpdir} && rm -rf ${tmpdir}
+    mkdir -p ${tmpdir}
+
+    if [[ $(echo ${PATH} | grep '/usr/sbin' | wc -l) == 0 ]]; then
+        PATH=${PATH}:/usr/sbin
+    fi
+    ! _exists "curl" && tools="${tools}"" curl "
+    ! _exists "wget" && tools="${tools}"" wget "
+    ! _exists "perl" && tools="${tools}"" perl "
+    ! _exists "nc" && tools="${tools}"" nc "
+    ! _exists "tar" && tools="${tools}"" tar "
+    ! _exists "git" && tools="${tools}"" git "
+    ! _exists "gcc" && tools="${tools}"" gcc "
+    ! _exists "make" && tools="${tools}"" make "
+    ! _exists "cmake" && tools="${tools}"" cmake "
+    ! _exists "bzip2" && tools="${tools}"" bzip2 "
+
+    # Check perl packages
+    _exists "perl" && perl -MFindBin -e 'print FindBin->VERSION. "\n"' > /dev/null 2>&1 && perl -MIPC::Cmd -e 'print IPC::Cmd->VERSION. "\n"' > /dev/null 2>&1
+    if [[ $? -ne 0 ]]; then
+        tools="${tools}"" perl "
+    fi
+
+    # TODO:
+    #    rpm                       /   dpkg
+    # dnf yum zypper               / apt-get
+    # xz-devel                     / liblzma-dev
+    # libffi-devel                 / libffi-dev
+    # zlib-devel                   / zlib1g-dev
+    # bzip2-devel/bzip-devel       / libbz2-dev
+    # readline-devel               / libreadline-dev
+    # sqlite-devel/sqlite3-devel   / libsqlite3-dev
+    [[ ! -f ${tmpdir}/cache/_dependencies_ok.lock ]] && ( ${SUDO} ps -A | grep -Ew "(dnf|yum|apt|zypper)" | awk '{print $1}' | xargs kill -9 > /dev/null 2>&1 )
+    if _exists "dnf" ; then
+        [[ ! -f ${tmpdir}/cache/_dependencies_ok.lock ]] && ${SUDO} dnf install epel-release -y
+        [[ ${tools} != "" ]] && ${SUDO} dnf install ${tools} -y
+        [[ ! -f ${tmpdir}/cache/_dependencies_ok.lock ]] && [[ -n ${DISPLAY} ]] && ${SUDO} dnf install tk-devel -y
+        [[ ! -f ${tmpdir}/cache/_dependencies_ok.lock ]] && ${SUDO} dnf install openssl-devel net-tools libffi-devel zlib-devel bzip2-devel readline-devel sqlite-devel xz-devel perl-Pod-Html perl-IPC-Cmd hdf5-devel unar -y
+        [[ $? -eq 0 ]] && touch ${tmpdir}/cache/_dependencies_ok.lock
+    elif _exists "yum" ; then
+        [[ ! -f ${tmpdir}/cache/_dependencies_ok.lock ]] && ${SUDO} yum install epel-release -y
+        [[ ${tools} != "" ]] && ${SUDO} yum install ${tools} -y
+        [[ ! -f ${tmpdir}/cache/_dependencies_ok.lock ]] && [[ -n ${DISPLAY} ]] && ${SUDO} yum install tk-devel -y
+        [[ ! -f ${tmpdir}/cache/_dependencies_ok.lock ]] && ${SUDO} yum install openssl-devel net-tools libffi-devel zlib-devel bzip2-devel readline-devel sqlite-devel xz-devel perl-Pod-Html perl-IPC-Cmd hdf5-devel unar -y
+        [[ $? -eq 0 ]] && touch ${tmpdir}/cache/_dependencies_ok.lock
+    elif _exists "apt" ; then
+        [[ ! -f ${tmpdir}/cache/_dependencies_ok.lock ]] && ${SUDO} apt update -y
+        [[ ! -f ${tmpdir}/cache/_dependencies_ok.lock ]] && ${SUDO} apt upgrade -y
+        [[ ${tools} != "" ]] && ${SUDO} apt install ${tools} -y
+        [[ ! -f ${tmpdir}/cache/_dependencies_ok.lock ]] && [[ -n ${DISPLAY} ]] && ${SUDO} apt install tk-dev -y
+        [[ ! -f ${tmpdir}/cache/_dependencies_ok.lock ]] && ${SUDO} apt install libssl-dev net-tools libffi-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev liblzma-dev uidmap libhdf5-dev unar -y
+        [[ $? -eq 0 ]] && touch ${tmpdir}/cache/_dependencies_ok.lock
+    elif _exists "zypper" ; then
+        [[ ! -f ${tmpdir}/cache/_dependencies_ok.lock ]] && ${SUDO} zypper -n install epel-release
+        [[ ${tools} != "" ]] && ${SUDO} zypper -n install ${tools}
+        [[ ! -f ${tmpdir}/cache/_dependencies_ok.lock ]] && [[ -n ${DISPLAY} ]] && ${SUDO} zypper -n install tk-devel
+        [[ ! -f ${tmpdir}/cache/_dependencies_ok.lock ]] && ${SUDO} zypper -n install openssl-devel net-tools net-tools-deprecated libffi-devel zlib-devel libbz2-devel readline-devel sqlite3-devel xz-devel hdf5-devel unar
+        [[ $? -eq 0 ]] && touch ${tmpdir}/cache/_dependencies_ok.lock
+    elif _exists "brew" ; then
+        :
+    else
+        _red "Error: platform not supported.\n" && _exit 1
+    fi
+}
+
+pybuild() {
+    local python_version=$1
+    local openssl_version=$2
+    local src_url=$3
+    local python_url=""
+    local openssl_url=""
+    local openssl_local=""
+    local tmpdir="$HOME/.local/share/tmp"
+    local start_time=$(date +%s)
+
+    if [[ "${python_version}" == "" ]] || [[ "$PYENV_ROOT" == "" ]]; then
+        return 1
+    else
+        mkdir -p ${tmpdir}/cache
+        # python_url="https://www.python.org/ftp/python/${python_version}/Python-${python_version}.tar.xz"
+        python_url="https://cdn.npmmirror.com/binaries/python/${python_version}/Python-${python_version}.tar.xz"
+    fi
+
+    _depends
+
+    [[ -d ${PYENV_DIR}/src ]] && cp -Rv ${PYENV_DIR}/src/* ${tmpdir}
+    [[ -f /usr/include/openssl/ssl.h ]] && openssl_local="$(openssl version)"
+    export PYTHON_BUILD_CACHE_PATH=${tmpdir}
+    if [[ "${openssl_local}" == "" ]]; then
+        if [[ "${openssl_version}" == "" ]]; then
+            openssl_version=3.0.13
+            openssl_url="https://www.openssl.org/source/old/3.0/openssl-3.0.13.tar.gz"
+            openssl_path=${PYENV_ROOT}/openssl/3.0.13
+        else
+            openssl_path=${PYENV_ROOT}/openssl/${openssl_version}
+        fi
+
+        if [[ "${src_url}" != "" ]]; then
+            openssl_url="${src_url}/openssl-${openssl_version}.tar.gz"
+        fi
+        cwd=$(pwd -P)
+        if [[ ! -f ${openssl_path}/include/openssl/ssl.h ]]; then
+            if [[ ! -f ${PYTHON_BUILD_CACHE_PATH}/openssl-${openssl_version}.tar.gz ]]; then
+                mkdir -p ${PYTHON_BUILD_CACHE_PATH}
+                curl -L ${openssl_url} -o ${PYTHON_BUILD_CACHE_PATH}/openssl-${openssl_version}.tar.gz
+            fi
+            tar xvf ${PYTHON_BUILD_CACHE_PATH}/openssl-${openssl_version}.tar.gz -C ${PYTHON_BUILD_CACHE_PATH}
+            cd ${PYTHON_BUILD_CACHE_PATH}/openssl-${openssl_version}
+            ./config --prefix=${openssl_path} --openssldir=${openssl_path} shared && make -j$(nproc) && make install
+            ret=$?
+            rm -rf ${PYTHON_BUILD_CACHE_PATH}/openssl-${openssl_version}
+            if [[ $ret -ne 0 ]]; then
+                cd $cwd
+                return 1
+            fi
+        fi
+        cd $cwd
+    fi
+
+    if [[ ! -f ${PYTHON_BUILD_CACHE_PATH}/Python-${python_version}.tar.xz ]]; then
+        mkdir -p ${PYTHON_BUILD_CACHE_PATH}
+        curl -L ${python_url} -o ${PYTHON_BUILD_CACHE_PATH}/Python-${python_version}.tar.xz
+    fi
+
+    oldpath=$PATH
+    if [[ "${openssl_local}" == "" ]] && [[ -f ${openssl_path}/lib/libssl.a ]]; then
+        export CFLAGS="-I${openssl_path}/include -I${openssl_path}/include/openssl"
+        export CPPFLAGS="-I${openssl_path}/include -I${openssl_path}/include/openssl"
+        export LDFLAGS="-L${openssl_path}/lib -Wl,-rpath ${openssl_path}/lib"
+        export LD_RUN_PATH=${openssl_path}/lib
+        export LD_LIBRARY_PATH=${openssl_path}/lib
+        export PKG_CONFIG_PATH=${openssl_path}/lib/pkgconfig
+        export PATH=${openssl_path}/bin:$PATH
+    elif [[ "${openssl_local}" == "" ]] && [[ -f ${openssl_path}/lib64/libssl.a ]]; then
+        export CFLAGS="-I${openssl_path}/include -I${openssl_path}/include/openssl"
+        export CPPFLAGS="-I${openssl_path}/include -I${openssl_path}/include/openssl"
+        export LDFLAGS="-L${openssl_path}/lib64 -Wl,-rpath ${openssl_path}/lib64"
+        export LD_RUN_PATH=${openssl_path}/lib64
+        export LD_LIBRARY_PATH=${openssl_path}/lib64
+        export PKG_CONFIG_PATH=${openssl_path}/lib64/pkgconfig
+        export PATH=${openssl_path}/bin:$PATH
+    else
+        export CFLAGS="-I/usr/include -I/usr/include/openssl"
+        export CPPFLAGS="-I/usr/include -I/usr/include/openssl"
+        export LDFLAGS="-L/usr/lib64 -Wl,-rpath /usr/lib64"
+        export LD_RUN_PATH=/usr/lib64
+        export LD_LIBRARY_PATH=/usr/lib64
+        export PKG_CONFIG_PATH=/usr/lib64/pkgconfig
+    fi
+
+    export PYTHONPATH=${PYENV_ROOT}/versions/${python_version}/bin
+    export PIP_REQUIRE_VIRTUALENV=false
+    export MAKE_OPTS=" -j$(nproc) "
+    export PATH=$PYTHONPATH:$PATH
+    if [[ "${openssl_local}" == "" ]]; then
+        CONFIGURE_OPTS="--enable-shared --with-openssl=${openssl_path}" pyenv install ${python_version} --verbose
+    else
+        #CONFIGURE_OPTS="--enable-shared --disable-gil --enable-optimizations"
+        CONFIGURE_OPTS="--enable-shared" pyenv install ${python_version} --verbose
+    fi
+
+    local log=${PYTHON_BUILD_CACHE_PATH}/python.build.$(date "+%Y%m%d%H%M%S").log
+    http_proxy=""
+    https_proxy=""
+    mirror_flag=" -i https://mirrors.aliyun.com/pypi/simple/ "
+    ${PYENV_ROOT}/versions/${python_version}/bin/python -m pip install ${mirror_flag} --upgrade pip --no-python-version-warning 2>>${log}
+    ${PYENV_ROOT}/versions/${python_version}/bin/python -m pip install ${mirror_flag} --upgrade setuptools --no-python-version-warning 2>>${log}
+    ${PYENV_ROOT}/versions/${python_version}/bin/python -m pip install ${mirror_flag} --upgrade wheel --no-python-version-warning 2>>${log}
+    ${PYENV_ROOT}/versions/${python_version}/bin/python -m pip install ${mirror_flag} --upgrade virtualenv --no-python-version-warning 2>>${log}
+    export PKG_CONFIG_PATH=""
+    export LD_LIBRARY_PATH=""
+    export LD_RUN_PATH=""
+    export LDFLAGS=""
+    export CPPFLAGS=""
+    export CFLAGS=""
+    export PIP_REQUIRE_VIRTUALENV=""
+    export PYTHONPATH=""
+    export PATH=$oldpath
+    eval "$(pyenv init -)"
+
+    local end_time=$(date +%s)
+    expend_time=$((end_time - start_time))
+    echo "Expend Time: $expend_time seconds"
+}
+
+completion() {
+    local cur subcommand
+    COMPREPLY=()
+
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    subcommand="${COMP_WORDS[1]}"
+
+    # TODO
+    local opts="pypy3.10-7.3.15 3.5.10 3.6.15 3.7.17 3.8.18 3.9.18 3.10.13 3.11.8 3.12.2"
+    if [ $COMP_CWORD = 1 ]; then
+        COMPREPLY=($(compgen -W "${opts}" -- ${cur}))
+        return 0
+    fi
+}
+
+# main
+cwd=$(pwd -P)
+cd $(dirname $BASH_SOURCE)
+ABSPATH="$(echo $(pwd -P)/$(basename $BASH_SOURCE))"
+export PYENV_DIR="$(dirname $ABSPATH)"
+PYENV_SRC=${PYENV_DIR}/src/$(ls -l src/ | grep -E "v[0-9]+\.[0-9]+\.[0-9]+\.tar\.gz|pyenv-[0-9]+\.[0-9]+\.[0-9]+\.tar\.gz" | awk '{print $NF}' | sort -r | uniq | sed -n '1p')
+PYENV_VERSION=$(ls -l src/ | grep -E "v[0-9]+\.[0-9]+\.[0-9]+\.tar\.gz|pyenv-[0-9]+\.[0-9]+\.[0-9]+\.tar\.gz" | awk '{print $NF}' | sort -r | uniq | sed -n '1p' | rev | cut -c 8- | rev | tr -d 'a-z' | sed -r "s/.*([0-9]+\.[0-9]+\.[0-9]+)$/\1/g")
+if [[ ! -x ${PYENV_DIR}/${PYENV_VERSION}/bin/pyenv ]]; then
+    rm -rf ${PYENV_DIR}/${PYENV_VERSION}
+    mkdir -p ${PYENV_DIR}/${PYENV_VERSION}
+    _exists "tar"
+    if [[ $? -ne 0 ]]; then
+        echo "Please input the password of root"
+        export CURRENT_USER=$(whoami); su -c '[[ ! -f /etc/sudoers.d/${CURRENT_USER} ]] && echo "${CURRENT_USER}    ALL=(ALL)       NOPASSWD: ALL" > /etc/sudoers.d/${CURRENT_USER}'
+        _depends
+    fi
+    tar xvf ${PYENV_SRC} -C ${PYENV_DIR}/${PYENV_VERSION} --strip-components 1
+fi
+export PYENV_ROOT=${PYENV_DIR}/${PYENV_VERSION}
+echo $PATH | grep "${PYENV_ROOT}/bin" >/dev/null 2>&1
+if [[ $? -ne 0 ]] && [[ -f ${PYENV_ROOT}/libexec/pyenv ]]; then
+    export PATH="$PYENV_ROOT/bin:$PYENV_ROOT/shims:$PYENV_ROOT/libexec:$PATH"
+fi
+cd $cwd
+export -f pybuild
+complete -F completion pybuild
+eval "$(pyenv init -)"
