@@ -114,9 +114,9 @@ pybuild() {
     export PYTHON_BUILD_CACHE_PATH=${tmpdir}
     if [[ "${openssl_local}" == "" ]]; then
         if [[ "${openssl_version}" == "" ]]; then
-            openssl_version=3.0.13
-            openssl_url="https://www.openssl.org/source/old/3.0/openssl-3.0.13.tar.gz"
-            openssl_path=${PYENV_ROOT}/openssl/3.0.13
+            openssl_version=3.0.14
+            openssl_url="https://www.openssl.org/source/old/3.0/openssl-3.0.14.tar.gz"
+            openssl_path=${PYENV_ROOT}/openssl/3.0.14
         else
             openssl_path=${PYENV_ROOT}/openssl/${openssl_version}
         fi
@@ -181,7 +181,7 @@ pybuild() {
     if [[ "${openssl_local}" == "" ]]; then
         CONFIGURE_OPTS="--enable-shared --with-openssl=${openssl_path}" pyenv install ${python_version} --verbose
     else
-        #CONFIGURE_OPTS="--enable-shared --disable-gil --enable-optimizations"
+        #CONFIGURE_OPTS="--enable-shared --disable-gil --enable-optimizations" pyenv install ${python_version} --verbose
         CONFIGURE_OPTS="--enable-shared" pyenv install ${python_version} --verbose
     fi
 
@@ -217,7 +217,7 @@ completion() {
     subcommand="${COMP_WORDS[1]}"
 
     # TODO
-    local opts="pypy3.10-7.3.15 3.5.10 3.6.15 3.7.17 3.8.18 3.9.18 3.10.13 3.11.8 3.12.2"
+    local opts="pypy3.10-7.3.17 3.5.10 3.6.15 3.7.17 3.8.20 3.9.18 3.10.15 3.11.10 3.12.7 3.13.0"
     if [ $COMP_CWORD = 1 ]; then
         COMPREPLY=($(compgen -W "${opts}" -- ${cur}))
         return 0
@@ -231,18 +231,21 @@ ABSPATH="$(echo $(pwd -P)/$(basename $BASH_SOURCE))"
 export PYENV_DIR="$(dirname $ABSPATH)"
 PYENV_SRC=${PYENV_DIR}/src/$(ls -l src/ | grep -E "v[0-9]+\.[0-9]+\.[0-9]+\.tar\.gz|pyenv-[0-9]+\.[0-9]+\.[0-9]+\.tar\.gz" | awk '{print $NF}' | sort -r | uniq | sed -n '1p')
 PYENV_VERSION=$(ls -l src/ | grep -E "v[0-9]+\.[0-9]+\.[0-9]+\.tar\.gz|pyenv-[0-9]+\.[0-9]+\.[0-9]+\.tar\.gz" | awk '{print $NF}' | sort -r | uniq | sed -n '1p' | rev | cut -c 8- | rev | tr -d 'a-z' | sed -r "s/.*([0-9]+\.[0-9]+\.[0-9]+)$/\1/g")
-if [[ ! -x ${PYENV_DIR}/${PYENV_VERSION}/bin/pyenv ]]; then
-    rm -rf ${PYENV_DIR}/${PYENV_VERSION}
-    mkdir -p ${PYENV_DIR}/${PYENV_VERSION}
+if [[ -z $PYENV_INSTALL_DIR ]]; then
+    export PYENV_INSTALL_DIR=$HOME/.local/pyenv
+fi
+if [[ ! -x ${PYENV_INSTALL_DIR}/${PYENV_VERSION}/bin/pyenv ]]; then
+    rm -rf ${PYENV_INSTALL_DIR}/${PYENV_VERSION}
+    mkdir -p ${PYENV_INSTALL_DIR}/${PYENV_VERSION}
     _exists "tar"
     if [[ $? -ne 0 ]]; then
         echo "Please input the password of root"
         export CURRENT_USER=$(whoami); su -c '[[ ! -f /etc/sudoers.d/${CURRENT_USER} ]] && echo "${CURRENT_USER}    ALL=(ALL)       NOPASSWD: ALL" > /etc/sudoers.d/${CURRENT_USER}'
         _depends
     fi
-    tar xvf ${PYENV_SRC} -C ${PYENV_DIR}/${PYENV_VERSION} --strip-components 1
+    tar xvf ${PYENV_SRC} -C ${PYENV_INSTALL_DIR}/${PYENV_VERSION} --strip-components 1
 fi
-export PYENV_ROOT=${PYENV_DIR}/${PYENV_VERSION}
+export PYENV_ROOT=${PYENV_INSTALL_DIR}/${PYENV_VERSION}
 echo $PATH | grep "${PYENV_ROOT}/bin" >/dev/null 2>&1
 if [[ $? -ne 0 ]] && [[ -f ${PYENV_ROOT}/libexec/pyenv ]]; then
     export PATH="$PYENV_ROOT/bin:$PYENV_ROOT/shims:$PYENV_ROOT/libexec:$PATH"
