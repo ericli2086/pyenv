@@ -232,7 +232,7 @@ export PYENV_DIR="$(dirname $ABSPATH)"
 PYENV_SRC=${PYENV_DIR}/src/$(ls -l src/ | grep -E "v[0-9]+\.[0-9]+\.[0-9]+\.tar\.gz|pyenv-[0-9]+\.[0-9]+\.[0-9]+\.tar\.gz" | awk '{print $NF}' | sort -r | uniq | sed -n '1p')
 PYENV_VERSION=$(ls -l src/ | grep -E "v[0-9]+\.[0-9]+\.[0-9]+\.tar\.gz|pyenv-[0-9]+\.[0-9]+\.[0-9]+\.tar\.gz" | awk '{print $NF}' | sort -r | uniq | sed -n '1p' | rev | cut -c 8- | rev | tr -d 'a-z' | sed -r "s/.*([0-9]+\.[0-9]+\.[0-9]+)$/\1/g")
 if [[ -z $PYENV_INSTALL_DIR ]]; then
-    export PYENV_INSTALL_DIR=$HOME/.local/pyenv
+    export PYENV_INSTALL_DIR=$HOME/.local/share/pyenv
 fi
 if [[ ! -x ${PYENV_INSTALL_DIR}/${PYENV_VERSION}/bin/pyenv ]]; then
     rm -rf ${PYENV_INSTALL_DIR}/${PYENV_VERSION}
