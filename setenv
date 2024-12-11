@@ -231,21 +231,20 @@ ABSPATH="$(echo $(pwd -P)/$(basename $BASH_SOURCE))"
 export PYENV_DIR="$(dirname $ABSPATH)"
 PYENV_SRC=${PYENV_DIR}/src/$(ls -l src/ | grep -E "v[0-9]+\.[0-9]+\.[0-9]+\.tar\.gz|pyenv-[0-9]+\.[0-9]+\.[0-9]+\.tar\.gz" | awk '{print $NF}' | sort -r | uniq | sed -n '1p')
 PYENV_VERSION=$(ls -l src/ | grep -E "v[0-9]+\.[0-9]+\.[0-9]+\.tar\.gz|pyenv-[0-9]+\.[0-9]+\.[0-9]+\.tar\.gz" | awk '{print $NF}' | sort -r | uniq | sed -n '1p' | rev | cut -c 8- | rev | tr -d 'a-z' | sed -r "s/.*([0-9]+\.[0-9]+\.[0-9]+)$/\1/g")
-if [[ -z $PYENV_INSTALL_DIR ]]; then
-    export PYENV_INSTALL_DIR=$HOME/.local/share/pyenv
-fi
-if [[ ! -x ${PYENV_INSTALL_DIR}/${PYENV_VERSION}/bin/pyenv ]]; then
-    rm -rf ${PYENV_INSTALL_DIR}/${PYENV_VERSION}
-    mkdir -p ${PYENV_INSTALL_DIR}/${PYENV_VERSION}
+if [[ ! -x ${PYENV_DIR}/${PYENV_VERSION}/bin/pyenv ]]; then
+    rm -rf ${PYENV_DIR}/${PYENV_VERSION}
+    mkdir -p ${PYENV_DIR}/${PYENV_VERSION}
+
+    # FIXME:
     _exists "tar"
     if [[ $? -ne 0 ]]; then
         echo "Please input the password of root"
         export CURRENT_USER=$(whoami); su -c '[[ ! -f /etc/sudoers.d/${CURRENT_USER} ]] && echo "${CURRENT_USER}    ALL=(ALL)       NOPASSWD: ALL" > /etc/sudoers.d/${CURRENT_USER}'
         _depends
     fi
-    tar xvf ${PYENV_SRC} -C ${PYENV_INSTALL_DIR}/${PYENV_VERSION} --strip-components 1
+    tar xvf ${PYENV_SRC} -C ${PYENV_DIR}/${PYENV_VERSION} --strip-components 1
 fi
-export PYENV_ROOT=${PYENV_INSTALL_DIR}/${PYENV_VERSION}
+export PYENV_ROOT=${PYENV_DIR}/${PYENV_VERSION}
 echo $PATH | grep "${PYENV_ROOT}/bin" >/dev/null 2>&1
 if [[ $? -ne 0 ]] && [[ -f ${PYENV_ROOT}/libexec/pyenv ]]; then
     export PATH="$PYENV_ROOT/bin:$PYENV_ROOT/shims:$PYENV_ROOT/libexec:$PATH"
