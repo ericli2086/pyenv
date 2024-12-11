@@ -217,7 +217,7 @@ completion() {
     subcommand="${COMP_WORDS[1]}"
 
     # TODO
-    local opts="pypy3.10-7.3.17 3.5.10 3.6.15 3.7.17 3.8.20 3.9.18 3.10.15 3.11.10 3.12.7 3.13.0"
+    local opts="pypy3.10-7.3.17 3.5.10 3.6.15 3.7.17 3.8.20 3.9.18 3.10.15 3.11.10 3.12.7 3.13.1"
     if [ $COMP_CWORD = 1 ]; then
         COMPREPLY=($(compgen -W "${opts}" -- ${cur}))
         return 0
